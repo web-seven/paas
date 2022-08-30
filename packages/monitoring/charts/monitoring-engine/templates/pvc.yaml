@@ -1,0 +1,18 @@
+{{- if or .Values.grafana.persistence.enabled .Values.loki.persistence.enabled .Values.prometheus.persistentVolume.enabled -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: monitoring-engine-storage
+  labels:
+    app: {{ .Release.Name }}-storage
+spec:
+  storageClassName: ""
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 100Gi
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-storage
+{{- end }}

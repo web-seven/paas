@@ -1,0 +1,59 @@
+{{ if .Values.github.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: {{ include "composition-engine.fullname" . }}-push
+  labels:
+    {{- include "composition-engine.labels" . | nindent 4 }}
+spec:
+  eventBusName: {{ $.Values.eventBusName }}
+  template:
+    serviceAccountName: argo-events-sa
+  dependencies:
+    - name: push
+      eventSourceName: {{ include "composition-engine.fullname" . }}-github
+      eventName: push
+      filters:
+        data:
+          - path: "body.ref"
+            type: string
+            value: 
+            - {{ .Values.github.refPattern }}
+  triggers:
+    - template:
+        name: github-workflow-trigger
+        k8s:
+          group: argoproj.io
+          version: v1alpha1
+          resource: workflows
+          operation: create
+          source:
+            resource:
+
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: {{ .Release.Name }}-push-build-
+              spec:
+                arguments:
+                  parameters:
+                  - name: ref
+                    value: ""
+                  - name: repository
+                    value: ""
+                workflowTemplateRef:
+                  name: {{ include "composition-engine.fullname" . }}-composition-engine
+
+          parameters:
+            - src:
+                dependencyName: push
+                dataTemplate: '{{ "{{" }} .Input.body.head_commit.id {{ "}}" }}'
+              dest: spec.arguments.parameters.0.value
+            - src:
+                dependencyName: push
+                dataTemplate: "{{ .Values.build.monoRepo.repository.server }}/{{ "{{" }} .Input.body.repository.full_name {{ "}}" }}"
+              dest: spec.arguments.parameters.1.value
+
+      retryStrategy:
+        steps: 3
+{{ end }}

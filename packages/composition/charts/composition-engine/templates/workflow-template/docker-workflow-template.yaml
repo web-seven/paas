@@ -1,0 +1,71 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: {{ include "composition-engine.fullname" . }}-docker-workflow-template
+  labels:
+    {{- include "composition-engine.labels" . | nindent 4 }}
+spec:
+  arguments:
+    parameters:
+      - name: source
+        value: ""
+      - name: destination
+        value: ""
+      - name: extra
+        value: ""
+      - name: suffix
+        value: ""
+      - name: pathToDockerfile
+        value: ""
+  templates:
+  - name: build-push
+    metadata:
+      labels:
+        workflow: web-seven
+    retryStrategy:
+      limit: "0"
+    inputs:
+      parameters:
+      - name: source
+      - name: image
+      - name: appVersion
+      - name: extra
+      - name: pathToDockerfile
+    container:
+      image: "gcr.io/kaniko-project/executor:latest"
+      args:
+        - --dockerfile={{ "{{" }}inputs.parameters.pathToDockerfile{{ "}}" }}
+        - --snapshotMode=redo
+        - --context=/workdir/{{ "{{" }}inputs.parameters.source{{ "}}" }}
+        - --destination={{ "{{" }}inputs.parameters.image{{ "}}" }}:{{ "{{" }}inputs.parameters.appVersion{{ "}}" }}
+        - "{{ "{{" }}inputs.parameters.extra{{ "}}" }}"
+      envFrom:
+      - secretRef:
+          name: {{ .Release.Name }}-workflow
+      resources:
+        requests:
+          memory: "2Gi"
+          cpu: "1.5"
+      volumeMounts:
+      - name: workdir
+        mountPath: /workdir
+      - name: out
+        mountPath: /mnt/out
+      - name: secrets
+        mountPath: /kaniko/.docker/config.json
+        subPath: .dockerconfigjson
+    restartPolicy: Never
+    volumes:
+      - name: cache
+        emptyDir: {}
+      - name: secrets
+        secret:
+          secretName: {{ .Release.Name }}-workflow
+    outputs:
+      parameters:
+      - name: appVersion
+        valueFrom:
+          default: "{{ "{{" }}inputs.parameters.appVersion{{ "}}" }}" 
+          path: /mnt/out/tag
+        globalName: appVersion
+

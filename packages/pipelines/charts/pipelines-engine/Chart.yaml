@@ -1,0 +1,24 @@
+apiVersion: v2
+name: pipelines-engine
+description: pipelines-engine chart based on Argo Project
+type: application
+version: 1.1.0
+appVersion: "2.2.5"
+
+dependencies:
+- name: argo-workflows
+  condition: argo-workflows.enabled
+  version: "~0.11.0"
+  repository: "https://argoproj.github.io/argo-helm"
+- name: argo-events
+  condition: argo-events.enabled
+  version: "~1.12.0"
+  repository: "https://argoproj.github.io/argo-helm"
+- name: postgresql
+  version: "~11.1.0"
+  repository: "https://charts.bitnami.com/bitnami"
+- name: minio
+  version: "~8.0.0"
+  repository: "https://helm.min.io/"
+
+

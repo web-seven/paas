@@ -1,0 +1,75 @@
+
+nameOverride: ""
+fullnameOverride: ""
+
+ingress:
+  auth:
+    enabled: true
+    username: loki
+    password: loki
+
+grafana:
+  enabled: true
+  persistence:
+    enabled: false
+  sidecar:
+    datasources:
+      enabled: true
+  ingress:
+    enabled: true
+    annotations: 
+      kubernetes.io/ingress.class: nginx
+      nginx.org/mergeable-ingress-type: "master"
+    path: /
+    pathType: Prefix
+    hosts:
+      - monitoring-engine.local
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+      - name: 'default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/default
+      - name: 'apollo-graphql-metrics'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/apollo-graphql-metrics
+  dashboardsConfigMaps:
+    default: monitoring-engine-grafana-pagespeed
+    apollo-graphql-metrics: apollo-graphql-metrics
+
+prometheus:
+  enabled: true
+  persistentVolume:
+    enabled: false
+  alertmanager:
+    enabled: false
+  pushgateway:
+    enabled: false
+  nodeExporter:
+    enabled: false
+  kubeStateMetrics:
+    enabled: false
+
+loki:
+  enabled: true
+  ingress:
+    enabled: true
+    annotations: 
+      kubernetes.io/ingress.class: nginx
+    hosts:
+    - host: monitoring-engine.local
+      paths: 
+      - /loki/api/v1/push
+  persistence:
+    enabled: false

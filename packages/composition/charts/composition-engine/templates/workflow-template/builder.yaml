@@ -1,0 +1,220 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: {{ include "composition-engine.fullname" . }}-composition-engine
+  labels:
+    {{- include "composition-engine.labels" . | nindent 4 }}
+spec:
+  serviceAccountName: argo-events-sa
+  entrypoint: main
+  arguments:
+    parameters:
+    - name: ref
+      value: ""
+    - name: repository
+      value: ""
+
+  templates:
+  - name: main
+    steps:
+
+    - - name: clone-app
+        templateRef:
+          name: {{ include "composition-engine.fullname" . }}-git-workflow-template
+          template: clone
+        arguments:
+          parameters:
+          - name: repo
+            value: "{{ "{{" }} workflow.parameters.repository {{ "}}" }}"
+
+    - - name: push-checkout
+        templateRef:
+          name: {{ include "composition-engine.fullname" . }}-git-workflow-template
+          template: checkout
+        arguments:
+          parameters:
+          - name: tag
+            value: "{{ "{{" }} workflow.parameters.ref {{ "}}" }}"
+          - name: repo
+            value: "{{ "{{" }} workflow.parameters.repository {{ "}}" }}"
+
+    - - name: affected-apps
+        templateRef:
+          name: {{ include "composition-engine.fullname" . }}-utils-workflow-template
+          template: affected-apps
+        arguments:
+          parameters:
+          - name: repo
+            value: "{{ "{{" }} workflow.parameters.repository {{ "}}" }}"
+
+    - - name: chart-changelog-file
+        templateRef:
+          name: {{ include "composition-engine.fullname" . }}-git-workflow-template
+          template: generate-changelog-file
+        when: "{{ "{{" }} item.isChart {{ "}}" }}"
+        arguments:
+          parameters:
+          - name: repo
+            value: "{{ "{{" }} workflow.parameters.repository {{ "}}" }}"
+          - name: chartPath
+            value: "{{ "{{" }} item.path {{ "}}" }}/charts/{{ "{{" }} item.name {{ "}}" }}"
+        withParam: "{{ "{{" }} workflow.outputs.parameters.apps {{ "}}" }}"
+
+    - - name: invoke-wf-creation
+        template: dynamic-wf-creation
+        arguments:
+          parameters:
+            - name: app-path
+              value: "{{"{{"}}item.path{{"}}"}}"
+            - name: repo
+              value: "{{"{{"}}workflow.parameters.repository{{"}}"}}"
+            - name: source
+              value: "{{"{{"}}workflow.parameters.repository{{"}}"}}/{{"{{"}}item.buildContext{{"}}"}}"
+            - name: extra
+              value: "--build-arg=NPM_TOKEN"
+            - name: image
+              value: "{{.Values.build.imageRegistry}}/{{"{{"}}item.name{{"}}"}}"
+            - name: appVersion
+              value: "{{"{{"}}workflow.parameters.ref{{"}}"}}"
+            - name: pathToDockerfile
+              value: "{{"{{"}}item.dockerfile{{"}}"}}"
+        withParam: "{{"{{"}}workflow.outputs.parameters.apps{{"}}"}}"
+        when: >-
+            ( {{ "{{" }} item.isOCI {{ "}}" }} &&
+              {{"{{"}}item.isworkflowConfig{{"}}"}}
+            )
+
+      - name: image-build
+        templateRef:
+          name: {{ include "composition-engine.fullname" . }}-docker-workflow-template
+          template: build-push
+        arguments:
+          parameters:
+          - name: source
+            value: "{{ "{{" }} workflow.parameters.repository {{ "}}" }}/{{ "{{" }} item.buildContext {{ "}}" }}"
+          - name: image
+            value: "{{ .Values.build.imageRegistry}}/{{ "{{" }} item.name {{ "}}" }}"
+          - name: appVersion
+            value: "{{ "{{" }}workflow.parameters.ref{{ "}}" }}"
+          - name: "extra"
+            value: "--build-arg=NPM_TOKEN"
+          - name: pathToDockerfile
+            value: "{{ "{{" }} item.dockerfile {{ "}}" }}"
+        withParam: "{{ "{{" }} workflow.outputs.parameters.apps {{ "}}" }}"
+        when: >-
+            ( {{ "{{" }} item.isOCI {{ "}}" }} &&
+              {{"{{"}}item.isworkflowConfig{{"}}"}} == false
+            )
+        continueOn:
+          failed: true
+
+    - - name: package
+        templateRef:
+          name: {{ include "composition-engine.fullname" . }}-chart-workflow-template
+          template: package
+        when: "{{ "{{" }} item.isChart {{ "}}" }}"
+        arguments:
+          parameters:
+          - name: source
+            value: "{{ "{{" }} workflow.parameters.repository {{ "}}" }}/{{ "{{" }} item.path {{ "}}" }}/charts/{{ "{{" }} item.name {{ "}}" }}"
+          - name: ref
+            value: "{{ "{{" }} workflow.parameters.ref {{ "}}" }}"
+          - name: version
+            value: "{{ "{{" }} workflow.parameters.ref {{ "}}" }}"
+          - name: appName
+            value: "{{ "{{" }} item.name {{ "}}" }}"
+          - name: chartRegistry
+            value: "{{ .Values.build.chartRegistry }}"
+        withParam: "{{ "{{" }} workflow.outputs.parameters.apps {{ "}}" }}"
+
+  - name: dynamic-wf-creation
+    inputs:
+      parameters:
+        - name: app-path
+        - name: source
+        - name: extra
+        - name: image
+        - name: appVersion
+        - name: pathToDockerfile
+    steps:
+      - - name: merge-manifests
+          template: merge-manifests
+          arguments:
+            parameters:
+              - name: source
+                value: "{{"{{"}}inputs.parameters.source{{"}}"}}"
+              - name: app-path
+                value: "{{"{{"}}inputs.parameters.app-path{{"}}"}}"
+      - - name: create-manifest
+          template: create-manifest
+          arguments:
+            parameters:
+              - name: manifest
+                value: "{{"{{"}}steps.merge-manifests.outputs.result{{"}}"}}"
+              - name: source
+                value: "{{"{{"}}inputs.parameters.source{{"}}"}}"
+              - name: extra
+                value: "{{"{{"}}inputs.parameters.extra{{"}}"}}"
+              - name: image
+                value: "{{"{{"}}inputs.parameters.image{{"}}"}}"
+              - name: appVersion
+                value: "{{"{{"}}inputs.parameters.appVersion{{"}}"}}"
+              - name: pathToDockerfile
+                value: "{{"{{"}}inputs.parameters.pathToDockerfile{{"}}"}}"
+
+  - name: merge-manifests
+    inputs:
+      parameters:
+        - name: source
+        - name: app-path
+    script:
+      image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+      command: [sh]
+      source: |
+        yq ea 'select(fileIndex == 0) * select(fileIndex == 1)' $DEFAULT_YAML $INJECTION -M
+      env:
+        - name: INJECTION
+          value: /workdir/{{"{{"}}inputs.parameters.source{{"}}"}}/{{"{{"}}inputs.parameters.app-path{{"}}"}}/workflow.yaml
+        - name: DEFAULT_YAML
+          value: /tmp/composition-engine-wf.yaml
+      volumeMounts:
+        - name: workdir
+          mountPath: /workdir
+        - name: manifest
+          mountPath: /tmp
+    volumes:
+      - name: manifest
+        configMap:
+          name: composition-engine-wf
+
+  - name: create-manifest
+    inputs:
+      parameters:
+        - name: manifest
+        - name: tag
+          value: "{{"{{"}}workflow.parameters.ref{{"}}"}}"
+        - name: repo
+          value: "{{"{{"}}workflow.parameters.repository{{"}}"}}"
+        - name: source
+        - name: extra
+        - name: image
+        - name: appVersion
+        - name: pathToDockerfile
+    resource:
+      action: create
+      manifest: "{{"{{"}}inputs.parameters.manifest{{"}}"}}"
+      successCondition: status.phase == Succeeded
+      failureCondition: status.phase in (Failed, Error)
+
+  volumes:
+  - name: out
+    emptyDir: {}
+  volumeClaimTemplates:
+  - metadata:
+      name: workdir
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      # storageClassName: {{ .Release.Name }}-lazy-storage
+      resources:
+        requests:
+          storage: 3Gi

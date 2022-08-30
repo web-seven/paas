@@ -1,0 +1,62 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: {{ include "composition-engine.fullname" . }}-chart-workflow-template
+  labels:
+    {{- include "composition-engine.labels" . | nindent 4 }}
+spec:
+  arguments:
+    parameters:
+      - name: tag
+        value: ""
+      - name: token
+        value: ""
+      - name: repo
+        value: ""
+      - name: chart
+        value: ""
+      - name: path
+        value: ""
+      - name: chartSuffix
+        value: ""
+      - name: appVersion
+        value: ""
+  templates:
+  - name: package
+    {{- with .Values.workflow.nodeSelector }}
+    nodeSelector:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    metadata:
+      labels:
+        workflow: web-seven
+    inputs:
+      parameters:
+      - name: source
+      - name: ref
+      - name: version
+      - name: appName
+      - name: chartRegistry
+    container:
+      image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+      command: ["/bin/bash", "-c"]
+      args: 
+      - |
+        {{ .Files.Get "files/package.sh" | nindent 8 }}
+      envFrom:
+      - secretRef:
+          name: {{ .Release.Name }}-workflow
+      env:
+      - name: CHART_REGISTRY
+        value: "{{ "{{" }}inputs.parameters.chartRegistry{{ "}}" }}"
+      - name: SOURCES
+        value: "{{ "{{" }}inputs.parameters.source{{ "}}" }}"
+      - name: APP_NAME
+        value: "{{ "{{" }}inputs.parameters.appName{{ "}}" }}"
+      - name: APP_VERSION
+        value: "{{ "{{" }}inputs.parameters.version{{ "}}" }}"
+      volumeMounts:
+        - name: workdir
+          mountPath: /workdir
+
+

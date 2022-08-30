@@ -1,0 +1,18 @@
+apiVersion: v2
+name: monitoring-engine
+description: monitoring-engine System for Applications
+type: application
+version: "1.0.4"
+dependencies:
+  - name: loki
+    condition: loki.enabled
+    repository: https://grafana.github.io/helm-charts
+    version: "~2.10.0"
+  - name: "grafana"
+    condition: grafana.enabled
+    version: "~6.24.0"
+    repository:  "https://grafana.github.io/helm-charts"
+  - name: "prometheus"
+    condition: prometheus.enabled
+    version: "~15.5.0"
+    repository:  "https://prometheus-community.github.io/helm-charts"

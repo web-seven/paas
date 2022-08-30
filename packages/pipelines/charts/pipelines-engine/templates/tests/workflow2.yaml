@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow 
+metadata:
+  name: {{ .Release.Name }}-workflow-test-2
+  generateName: workflow-test-2-
+  annotations:
+    "helm.sh/hook": test
+spec:
+  entrypoint: whalesay
+  templates:
+  - name: whalesay
+    container:
+      image: docker/whalesay:latest
+      command: [sh, -c]
+      args: ["cowsay hello world | sleep 60 | tee /tmp/hello_world.txt"]
+  - name: whalesay2
+    container:
+      image: docker/whalesay:latest
+      command: [sh, -c]
+      args: ["cowsay hello world | sleep 60 | tee /tmp/hello_world.txt"]
+    # outputs:
+    #   artifacts:
+    #   # generate hello-art artifact from /tmp/hello_world.txt
+    #   # artifacts can be directories as well as files
+    #   - name: hello-art
+    #     path: /tmp/hello_world.txt

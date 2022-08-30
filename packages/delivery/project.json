@@ -1,0 +1,6 @@
+{
+  "root": "packages/delivery",
+  "sourceRoot": "src",
+  "projectType": "module",
+  "tags": ["scope:paas"]
+}

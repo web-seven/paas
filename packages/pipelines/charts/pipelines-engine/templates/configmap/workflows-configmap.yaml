@@ -1,0 +1,10 @@
+{{- $workflows := index .Values "argo-workflows" -}}
+{{- if $workflows.enabled -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+ name: argo-workflow-config
+data:
+  workflow: "3" 
+  template: "1"
+{{- end -}}

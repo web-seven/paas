@@ -1,0 +1,16 @@
+apiVersion: argoproj.io/v1alpha1
+kind: EventSource
+metadata:
+  name: argocd-notification-webhook
+spec:
+  eventBusName: {{ include "pipelines-engine.fullname" . }}-eventbus
+  service:
+    ports:
+      - port: 12000
+        targetPort: 12000
+  webhook:
+    notification:
+      port: "12000"
+      endpoint: /
+      method: POST
+      

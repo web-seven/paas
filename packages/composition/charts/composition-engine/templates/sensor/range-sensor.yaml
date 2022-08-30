@@ -1,0 +1,184 @@
+{{ if .Values.webhook.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: {{ include "composition-engine.fullname" . }}-range
+  labels:
+    {{- include "composition-engine.labels" . | nindent 4 }}
+spec:
+  eventBusName: {{ $.Values.eventBusName }}
+  template:
+    serviceAccountName: argo-events-sa
+  dependencies:
+    - name: range
+      eventSourceName: {{ include "composition-engine.fullname" . }}-webhook
+      eventName: range
+  triggers:
+    - template:
+        name: github-workflow-trigger
+        k8s:
+          group: argoproj.io
+          version: v1alpha1
+          resource: workflows
+          operation: create
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: {{ .Release.Name }}-range-build-
+              spec:
+                serviceAccountName: argo-events-sa
+                entrypoint: main
+                arguments:
+                  parameters:
+                  - name: rangeAppRange
+                    value: ""
+                  - name: rangeAppSuffix
+                    value: ""
+                  - name: rangeChartSuffix
+                    value: ""
+                  - name: repository
+                    value: ""
+                  - name: image
+                    value: ""
+                  - name: chartPath
+                    value: ""
+                  - name: chartName
+                    value: ""
+                  - name: appPath
+                    value: ""
+
+                templates:
+                - name: main 
+                  steps:
+
+                  - - name: clone-app
+                      templateRef: 
+                        name: {{ include "composition-engine.fullname" . }}-git-workflow-template
+                        template: clone
+                      arguments:
+                        parameters:
+                        - name: repo
+                          value: "{{ "{{" }} workflow.parameters.repository {{ "}}" }}"
+
+                  - - name: app-tag
+                      templateRef: 
+                        name: {{ include "composition-engine.fullname" . }}-git-workflow-template
+                        template: search-switch-tag
+                      arguments:
+                        parameters:
+                        - name: range
+                          value: "{{ "{{" }}workflow.parameters.rangeAppRange{{ "}}" }}"
+                        - name: repo
+                          value: "{{ "{{" }} workflow.parameters.repository {{ "}}" }}"
+                        - name: prefix
+                          value: "v"
+
+                  - - name: chart-changelog-file
+                      templateRef: 
+                        name: {{ include "composition-engine.fullname" . }}-git-workflow-template
+                        template: generate-changelog-file
+                      arguments:
+                        parameters:
+                        - name: repo
+                          value: "{{ "{{" }} workflow.parameters.repository {{ "}}" }}"
+                        - name: chartPath
+                          value: "{{ "{{" }} workflow.parameters.repository {{ "}}" }}/{{ "{{" }} workflow.parameters.chartPath {{ "}}" }}"
+
+                  - - name: image-build
+                      templateRef: 
+                        name: {{ include "composition-engine.fullname" . }}-docker-workflow-template
+                        template: build-push
+                      arguments:
+                        parameters:
+                        - name: source
+                          value: "{{ "{{" }} workflow.parameters.repository {{ "}}" }}/{{ "{{" }} workflow.parameters.appPath {{ "}}" }}"
+                        - name: image
+                          value: "{{ "{{" }}workflow.parameters.image{{ "}}" }}"
+                        - name: appVersion
+                          value: "{{ "{{" }}workflow.outputs.parameters.tag{{ "}}" }}{{ "{{" }}workflow.parameters.rangeAppSuffix{{ "}}" }}"
+                        - name: "extra"
+                          value: "--build-arg=NPM_TOKEN"
+
+                  - - name: package
+                      templateRef: 
+                        name: {{ include "composition-engine.fullname" . }}-chart-workflow-template
+                        template: package
+                      arguments:
+                          parameters: 
+                          - name: version
+                            value: "{{ "{{" }}workflow.outputs.parameters.tag{{ "}}" }}{{ "{{" }}workflow.parameters.rangeChartSuffix{{ "}}" }}"
+                          - name: appVersion
+                            value: "{{ "{{" }}workflow.outputs.parameters.tag{{ "}}" }}{{ "{{" }}workflow.parameters.rangeAppSuffix{{ "}}" }}"
+                          - name: chartName
+                            value: "{{ "{{" }}workflow.parameters.chartName{{ "}}" }}-"
+                          - name: chartRepo
+                            value: {{ .Values.build.chartRegistry }}
+                          - name: chartPath
+                            value: "{{ "{{" }} workflow.parameters.repository {{ "}}" }}/{{ "{{" }} workflow.parameters.chartPath {{ "}}" }}"
+
+                volumes:
+                - name: out
+                  emptyDir: {}
+                volumeClaimTemplates:
+                - metadata:
+                    name: workdir
+                  spec:
+                    accessModes: [ "ReadWriteOnce" ]
+                    storageClassName: {{ .Release.Name }}-lazy-storage
+                    resources:
+                      requests:
+                        storage: 3Gi 
+          parameters:
+            - src:
+                dependencyName: range
+                dataKey: header.App-Version-Range.0
+              dest: spec.arguments.parameters.0.value
+            - src:
+                dependencyName: range
+                dataTemplate: "-{{ "{{" }} .Input.body.masterRef {{ "}}" }}"
+              dest: spec.arguments.parameters.1.value
+            - src:
+                dependencyName: range
+                dataTemplate: "+{{ "{{" }} .Input.body.masterRef {{ "}}" }}"
+              dest: spec.arguments.parameters.2.value
+            - src:  
+                dependencyName: range
+              {{- if .Values.build.monoRepo.enabled }}
+                dataTemplate: "{{ .Values.build.monoRepo.repository.server }}/{{ .Values.build.monoRepo.repository.owner }}/{{ .Values.build.monoRepo.repository.name }}"
+              {{- else }}
+                dataKey: header.App-Repository.0
+              {{- end }}
+              dest: spec.arguments.parameters.3.value
+            - src:  
+                dependencyName: range
+              {{- if .Values.build.monoRepo.enabled }}
+                dataTemplate: "{{ .Values.build.imageRegistry }}/{{ "{{" }} index .Input.header \"App-Chart-Name\" | first {{ "}}" }}"
+              {{- else }}
+                dataTemplate: "{{ .Values.build.imageRegistry }}/{{ "{{" }} index .Input.header \"App-Repository\" | first{{ "}}" }}/{{ "{{" }} index .Input.header \"App-Chart-Name\" | first {{ "}}" }}"
+              {{- end }}  
+              dest: spec.arguments.parameters.4.value
+            - src:  
+                dependencyName: range
+              {{- if .Values.build.monoRepo.enabled }}
+                {{- if eq .Values.build.monoRepo.type "nx" }}
+                dataTemplate: "apps/{{ "{{" }} index .Input.header \"App-Chart-Name\" | first {{ "}}" }}/charts/{{ "{{" }} index .Input.header \"App-Chart-Name\" | first | splitList \"/\" | last {{ "}}" }}"
+                {{- end }} 
+              {{- else }}
+                dataTemplate: "charts/{{ "{{" }} index .Input.header \"App-Chart-Name\" | first {{ "}}" }}"
+                {{- end }} 
+              dest: spec.arguments.parameters.5.value
+            - src:  
+                dependencyName: range
+                dataTemplate: "{{ "{{" }} index .Input.header \"App-Chart-Name\" | first | splitList \"/\" | last  {{ "}}" }}"
+              dest: spec.arguments.parameters.6.value
+            {{- if .Values.build.monoRepo.enabled }}
+            - src:  
+                dependencyName: range
+                dataTemplate: "apps/{{ "{{" }} index .Input.header \"App-Chart-Name\" | first {{ "}}" }}"
+              dest: spec.arguments.parameters.7.value
+            {{- end }} 
+      retryStrategy:
+        steps: 3
+{{ end }}

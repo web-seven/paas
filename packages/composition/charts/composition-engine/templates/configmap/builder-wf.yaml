@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: composition-engine-wf
+data:
+  composition-engine-wf.yaml: |-
+    {{- tpl (.Files.Get "files/composition-engine-wf.yaml") . | nindent 4 }}

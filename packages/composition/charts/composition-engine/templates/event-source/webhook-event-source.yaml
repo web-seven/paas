@@ -1,0 +1,21 @@
+{{ if .Values.webhook.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: EventSource
+metadata:
+  name: {{ include "composition-engine.fullname" . }}-webhook
+  labels:
+    {{- include "composition-engine.labels" . | nindent 4 }}
+spec:
+  eventBusName: {{ $.Values.eventBusName }}
+  service:
+    ports:
+      - port:  {{ $.Values.webhook.service.port }}
+        targetPort: {{ $.Values.webhook.service.port }}
+  type: "webhook"
+  webhook:
+    range:
+      namespace: {{ $.Release.Namespace }}
+      port: "{{ $.Values.webhook.service.port }}"
+      endpoint: "{{ $.Values.webhook.path }}"
+      method: "POST"
+{{ end }}

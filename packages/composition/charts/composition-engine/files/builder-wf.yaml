@@ -1,0 +1,141 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: {{ include "composition-engine.fullname" . }}-docker-workflow-template
+  labels:
+    {{- include "composition-engine.labels" . | nindent 4 }}
+spec:
+  serviceAccountName: argo-events-sa
+  entrypoint: main
+  arguments:
+    parameters:
+      - name: tag
+        value: "{{"{{"}}inputs.parameters.tag{{"}}"}}"
+      - name: repo
+        value: "{{"{{"}}inputs.parameters.repo{{"}}"}}"
+      - name: source
+        value: "{{"{{"}}inputs.parameters.source{{"}}"}}"
+      - name: extra
+        value: "{{"{{"}}inputs.parameters.extra{{"}}"}}"
+      - name: image
+        value: "{{"{{"}}inputs.parameters.image{{"}}"}}"
+      - name: appVersion
+        value: "{{"{{"}}inputs.parameters.appVersion{{"}}"}}"
+      - name: pathToDockerfile
+        value: "{{"{{"}}inputs.parameters.pathToDockerfile{{"}}"}}"
+
+  templates:
+
+    - name: main
+      steps:
+        - - name: clone-app
+            templateRef:
+              name: {{ include "composition-engine.fullname" . }}-git-workflow-template
+              template: clone
+            arguments:
+              parameters:
+              - name: repo
+                value: "{{ "{{" }} workflow.parameters.repository {{ "}}" }}"
+
+        - - name: push-checkout
+            templateRef:
+              name: {{ include "composition-engine.fullname" . }}-git-workflow-template
+              template: checkout
+            arguments:
+              parameters:
+              - name: tag
+                value: "{{ "{{" }} workflow.parameters.ref {{ "}}" }}"
+              - name: repo
+                value: "{{ "{{" }} workflow.parameters.repository {{ "}}" }}"
+
+        - - name: install-packages
+            template: install-packages
+            arguments:
+              parameters:
+                - name: repo
+                  value: "{{ "{{" }} workflow.parameters.repository {{ "}}" }}"
+
+        - - name: build-push
+            template: build-push
+            arguments:
+              parameters:
+                - name: source
+                  value: "{{ "{{" }} workflow.parameters.source {{ "}}" }}"
+                - name: extra
+                  value: "{{ "{{" }} workflow.parameters.extra {{ "}}" }}"
+                - name: image
+                  value: "{{ "{{" }} workflow.parameters.image {{ "}}" }}"
+                - name: appVersion
+                  value: "{{ "{{" }} workflow.parameters.appVersion {{ "}}" }}"
+                - name: pathToDockerfile
+                  value: "{{ "{{" }} workflow.parameters.pathToDockerfile {{ "}}" }}"
+
+    - name: build-push
+      metadata:
+        labels:
+          workflow: web-seven
+      retryStrategy:
+        limit: "0"
+      inputs:
+        parameters:
+        - name: source
+        - name: extra
+        - name: image
+        - name: appVersion
+        - name: pathToDockerfile
+      container:
+        image: "gcr.io/kaniko-project/executor:latest"
+        args:
+          - --dockerfile={{ "{{" }}inputs.parameters.pathToDockerfile{{ "}}" }}
+          - --snapshotMode=redo
+          - --context=/workdir/{{ "{{" }}inputs.parameters.source{{ "}}" }}
+          - --destination={{ "{{" }}inputs.parameters.image{{ "}}" }}:{{ "{{" }}inputs.parameters.appVersion{{ "}}" }}
+          - "{{ "{{" }}inputs.parameters.extra{{ "}}" }}"
+        envFrom:
+        - secretRef:
+            name: {{ .Release.Name }}-workflow
+        volumeMounts:
+        - name: workdir
+          mountPath: /workdir
+        - name: secrets
+          mountPath: /kaniko/.docker/config.json
+          subPath: .dockerconfigjson
+      restartPolicy: Never
+      volumes:
+        - name: cache
+          emptyDir: {}
+        - name: secrets
+          secret:
+            secretName: {{ .Release.Name }}-workflow
+
+    - name: install-packages
+      inputs:
+        parameters:
+        - name: repo
+      container:
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        command: ["/bin/sh", "-c"]
+        args:
+          - echo "//npm.pkg.github.com/:_authToken=$NPM_TOKEN" > ~/.npmrc;
+            cd /workdir/{{ "{{" }}inputs.parameters.repo{{ "}}" }};
+            echo "Installing NPM packages.";
+            npm ci;
+        envFrom:
+        - secretRef:
+            name: {{ .Release.Name }}-workflow
+        volumeMounts:
+          - name: workdir
+            mountPath: /workdir
+
+  volumes:
+  - name: out
+    emptyDir: {}
+  volumeClaimTemplates:
+  - metadata:
+      name: workdir
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      # storageClassName: {{ .Release.Name }}-lazy-storage
+      resources:
+        requests:
+          storage: 3Gi

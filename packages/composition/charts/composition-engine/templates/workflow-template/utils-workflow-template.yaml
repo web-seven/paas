@@ -1,0 +1,61 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: {{ include "composition-engine.fullname" . }}-utils-workflow-template
+  labels:
+    {{- include "composition-engine.labels" . | nindent 4 }}
+spec:
+  arguments:
+    parameters:
+      - name: data
+        value: ""
+  templates:
+  - name: dump
+    {{- with .Values.workflow.nodeSelector }}
+    nodeSelector:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    inputs:
+      parameters:
+      - name: data
+    container:
+      image: busybox
+      command: [echo]
+      args: ["{{ "{{" }}inputs.parameters.data{{ "}}" }}"]
+  - name: affected-apps
+    {{- with .Values.workflow.nodeSelector }}
+    nodeSelector:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    metadata:
+      labels:
+        workflow: web-seven
+    inputs:
+      parameters:
+      - name: repo
+        value: ''
+    container:
+      image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+      command: ["/bin/sh", "-c"]
+      args:
+        - echo "//npm.pkg.github.com/:_authToken=$NPM_TOKEN" > ~/.npmrc;
+          cd /workdir/{{ "{{" }}inputs.parameters.repo{{ "}}" }};
+          echo "Installing NPM packages.";
+          npm ci;
+          echo "Search affected applications.";
+          nx print-affected --base=HEAD~1 --head=HEAD > affected.json;
+          node /tools/affected-apps.js ./affected.json ./workspace.json > /mnt/out/apps;
+      envFrom:
+      - secretRef:
+          name: {{ .Release.Name }}-workflow
+      volumeMounts:
+        - name: workdir
+          mountPath: /workdir
+        - name: out
+          mountPath: /mnt/out
+    outputs:
+      parameters:
+      - name: apps
+        valueFrom:
+          path: /mnt/out/apps
+        globalName: apps

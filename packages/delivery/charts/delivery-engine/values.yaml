@@ -1,0 +1,105 @@
+global:
+  useVaultSecrets: true
+
+argo-cd:
+  installCRDs: false
+  dex:
+    enabled: true
+    env:
+    - name: ARGO_WORKFLOWS_SSO_CLIENT_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: argo-workflows-sso
+          key: client-secret
+  repoServer:
+    initContainers: 
+    - name: download-tools
+      image: alpine:3.8
+      command: [sh, -c]
+      env:
+        - name: AVP_VERSION
+          value: "1.10.1"
+      args:
+        - >-
+          wget -O argocd-vault-plugin
+          https://github.com/argoproj-labs/argocd-vault-plugin/releases/download/v${AVP_VERSION}/argocd-vault-plugin_${AVP_VERSION}_linux_amd64 &&
+          chmod +x argocd-vault-plugin &&
+          mv argocd-vault-plugin /custom-tools/
+      volumeMounts:
+        - mountPath: /custom-tools
+          name: custom-tools
+    envFrom: 
+    - secretRef:
+        name: argocd-vault-plugin-credentials
+    volumeMounts:
+      - name: custom-tools
+        mountPath: /usr/local/bin/argocd-vault-plugin
+        subPath: argocd-vault-plugin
+    volumes:
+      - name: custom-tools
+        emptyDir: {}
+  server:
+    extraArgs:
+    - --insecure
+    rbacConfig:
+      policy.default: role:admin
+    config:
+      configManagementPlugins: |
+        - name: argocd-vault-plugin-helm
+          generate:
+            command: ["sh", "-c"]
+            args: ["helm -n $ARGOCD_APP_NAMESPACE template $ARGOCD_APP_NAME ${HELM_ARGS} . --include-crds | argocd-vault-plugin generate -"]
+      url: https://delivery-engine.paas.dev
+      accounts.terraform: apiKey, login
+      accounts.terraform.enabled: "true"
+      dex.config: |
+        staticClients:
+        - id: argo-workflows-sso
+          name: Argo Workflow
+          redirectURIs:
+            - https://pipelines.paas.dev/oauth2/callback
+          secretEnv: ARGO_WORKFLOWS_SSO_CLIENT_SECRET
+        connectors:
+        - id: oidc-auth0
+          type: oidc
+          name: Auth0
+          config:
+            issuer: https://web-seven-admin.eu.auth0.com/
+            clientID: $dex-oidc-auth0:AUTH0_CLIENT_ID
+            clientSecret: $dex-oidc-auth0:AUTH0_CLIENT_SECRET
+            insecureEnableGroups: true
+            scopes:
+            - profile
+            - email
+            - groups
+            - roles
+            getUserInfo: true
+    ingress:
+      enabled: true
+      service:
+        servicePortHttps: true
+      hosts:
+      - delivery-engine.paas.dev
+      annotations:
+        kubernetes.io/ingress.class: "nginx"
+        acme.cert-manager.io/http01-edit-in-place: "true"
+        cert-manager.io/cluster-issuer: "cert-manager-production"
+        ingress.kubernetes.io/ssl-redirect: "false"
+        nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+        nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+        nginx.org/redirect-to-https: "false"
+        certmanager.k8s.io/acme-challenge-type: http01
+      tls:
+      - secretName: argocd-tls-certificate
+        hosts:
+          - delivery-engine.paas.dev
+helm-github-proxy:
+  imagePullSecrets:
+  - name: regcred
+
+notifications:
+  enabled: true
+
+env:
+  AUTH0_CLIENT_ID:
+  AUTH0_CLIENT_SECRET:

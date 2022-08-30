@@ -1,0 +1,41 @@
+{{ if .Values.github.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: EventSource
+metadata:
+  name: {{ include "composition-engine.fullname" . }}-github
+spec:
+  eventBusName: {{ .Values.eventBusName}}
+  service:
+    {{- range .Values.github.service.ports }}
+    ports:
+      - port: {{ .port }}
+        targetPort: {{ .targetPort }}
+    {{- end }}    
+  github:
+
+    push:
+      {{- range .Values.github.appRepo.repositories }}
+      repositories:
+        - owner: {{ .owner }}
+          names:
+          {{- range .names }}
+            - {{ . }}
+          {{- end }}
+      {{- end }}
+      {{- with .Values.github.appRepo }}
+      webhook: 
+        endpoint: {{ tpl .webhook.endpoint $ }}
+        port: {{ .webhook.port | quote }}
+        method: {{ .webhook.method }}
+        url: https://{{ $.Values.ingress.host }}
+      events:
+        - push
+      {{- end }}
+      apiToken:
+        name: {{ .Release.Name }}-workflow
+        key: GITHUB_TOKEN
+      insecure: true
+      active: true
+      contentType: json
+
+{{ end }}

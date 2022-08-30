@@ -1,0 +1,178 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: {{ include "composition-engine.fullname" . }}-git-workflow-template
+  labels:
+    {{- include "composition-engine.labels" . | nindent 4 }}
+spec:
+  arguments:
+    parameters:
+      - name: repo
+        value: ""
+      - name: tag
+        value: ""
+      - name: range
+        value: ""
+      - name: prefix
+        value: " "
+      - name: fallback
+        value: ""
+      - name: chartPath  
+  templates:
+
+  - name: clone
+    {{- with .Values.workflow.nodeSelector }}
+    nodeSelector:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    metadata:
+      labels:
+        workflow: web-seven
+    inputs:
+      parameters:
+      - name: repo
+    container:
+      image: "alpine/git"
+      command: ["/bin/sh", "-c"]
+      args:  [
+        "git clone https://$GITHUB_TOKEN:x-oauth-basic@{{ "{{" }}inputs.parameters.repo{{ "}}" }}.git /workdir/{{ "{{" }}inputs.parameters.repo{{ "}}" }}"
+        ]
+      envFrom:
+      - secretRef:
+          name: {{ .Release.Name }}-workflow
+      volumeMounts:
+      - name: workdir
+        mountPath: /workdir
+    volumes:
+    - name: secrets
+      secret:
+        secretName: {{ .Release.Name }}-workflow
+        
+  - name: search-switch-tag
+    {{- with .Values.workflow.nodeSelector }}
+    nodeSelector:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    metadata:
+      labels:
+        workflow: web-seven
+    inputs:
+      parameters:
+      - name: range
+      - name: repo
+      - name: prefix
+        value: " "
+      - name: fallback
+        value: ""
+    container:
+      image: "alpine/git"
+      command: ["/bin/sh"]
+      args: [
+        "-c",
+        "git -C ${GIT_REPO_PATH} tag | sed 's/{{ "{{" }}inputs.parameters.prefix{{ "}}" }}//g' |xargs npx -q semver --preid rc -r \"{{ "{{" }}inputs.parameters.range{{ "}}" }}\" {}|tail -1|xargs -t -I {} sh -c \"git -C ${GIT_REPO_PATH} checkout {{ "{{" }}inputs.parameters.prefix{{ "}}" }}{}; echo {} > /mnt/out/tag\";",
+        "ls -la ${GIT_REPO_PATH}"
+        ]
+      env:
+      - name: GIT_REPO_PATH
+        value: "/workdir/{{ "{{" }}inputs.parameters.repo{{ "}}" }}"
+      volumeMounts:
+      - name: workdir
+        mountPath: /workdir
+      - name: out
+        mountPath: /mnt/out
+    outputs:
+      parameters:
+      - name: tag
+        valueFrom:
+          default: "{{ "{{" }}inputs.parameters.fallback{{ "}}" }}" 
+          path: /mnt/out/tag
+        globalName: tag
+
+  - name: checkout
+    {{- with .Values.workflow.nodeSelector }}
+    nodeSelector:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    metadata:
+      labels:
+        workflow: web-seven
+    inputs:
+      parameters:
+      - name: tag
+      - name: repo
+      - name: fallback
+        value: ""
+    container:
+      image: "alpine/git"
+      command: ["/bin/sh"]
+      args: [
+        "-c",
+        "git -C ${GIT_REPO_PATH} checkout '{{ "{{" }}inputs.parameters.tag{{ "}}" }}' && echo '{{ "{{" }}inputs.parameters.tag{{ "}}" }}' > /mnt/out/tag;",
+        "git log;"
+        ]
+      env:
+      - name: GIT_REPO_PATH
+        value: "/workdir/{{ "{{" }}inputs.parameters.repo{{ "}}" }}"
+      volumeMounts:
+      - name: workdir
+        mountPath: /workdir
+      - name: out
+        mountPath: /mnt/out
+    outputs:
+      parameters:
+      - name: tag
+        valueFrom:
+          default: "{{ "{{" }}inputs.parameters.fallback{{ "}}" }}" 
+          path: /mnt/out/tag
+        globalName: tag
+
+  - name: branch
+    {{- with .Values.workflow.nodeSelector }}
+    nodeSelector:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    metadata:
+      labels:
+        workflow: web-seven
+    inputs:
+      parameters:
+      - name: repo
+    container:
+      image: "alpine/git"
+      command: ["/bin/sh"]
+      args: [
+        "-c",
+        "git -C ${GIT_REPO_PATH} branch"
+        ]
+      env:
+      - name: GIT_REPO_PATH
+        value: "/workdir/{{ "{{" }}inputs.parameters.repo{{ "}}" }}"
+      volumeMounts:
+      - name: workdir
+        mountPath: /workdir
+
+  - name: generate-changelog-file
+    {{- with .Values.workflow.nodeSelector }}
+    nodeSelector:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    metadata:
+      labels:
+        workflow: web-seven
+    inputs:
+      parameters:
+      - name: repo
+      - name: chartPath
+    container:
+      image: "alpine/git"
+      command: ["/bin/sh", "-c"]
+      args:
+      - |
+        cd /workdir/{{ "{{" }}inputs.parameters.repo{{ "}}" }}
+        git log --format=%s > {{ "{{" }}inputs.parameters.chartPath{{ "}}" }}/CHANGELOG.txt
+      envFrom:
+      - secretRef:
+          name: {{ .Release.Name }}-workflow
+      volumeMounts:
+      - name: workdir
+        mountPath: /workdir

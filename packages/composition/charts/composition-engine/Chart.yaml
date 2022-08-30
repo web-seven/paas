@@ -1,0 +1,7 @@
+apiVersion: v2
+name: composition-engine
+description: Application and Chart composition-engine (tag, range)
+type: application
+version: 2.0.2-beta.0
+appVersion: 2.0.2-beta.4
+

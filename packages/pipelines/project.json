@@ -1,0 +1,6 @@
+{
+  "root": "packages/pipelines",
+  "sourceRoot": "src",
+  "projectType": "module",
+  "tags": ["scope:paas"]
+}

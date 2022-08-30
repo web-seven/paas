@@ -1,0 +1,6 @@
+{
+  "root": "packages/monitoring",
+  "sourceRoot": "src",
+  "projectType": "module",
+  "tags": ["scope:paas"]
+}

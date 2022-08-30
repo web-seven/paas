@@ -1,0 +1,16 @@
+{{- if or .Values.minio.persistence.enabled .Values.postgresql.primary.persistence.enabled -}}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ .Release.Name }}-storage
+  labels:
+    app: {{ .Release.Name }}-storage
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteMany
+  gcePersistentDisk:
+    pdName: {{ .Release.Name }}-storage
+    fsType: ext4
+{{- end }}

@@ -1,5 +1,10 @@
 {
   "$schema": "./node_modules/nx/schemas/workspace-schema.json",
   "version": 2,
-  "projects": {}
+  "projects": {
+    "composition-engine": "./packages/composition",
+    "delivery-engine": "./packages/delivery",
+    "monitoring-engine": "./packages/monitoring",
+    "pipelines-engine": "./packages/pipelines"
+  }
 }

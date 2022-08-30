@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-workflow-test-2
+  generateName: permissions-check
+  annotations:
+    "helm.sh/hook": test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bash
+  template:
+    metadata:
+      labels:
+        app: bash
+    spec:
+      containers:
+        - name: bash
+          image: bitnami/bitnami-shell:10-debian-10-r357
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              tail -f /dev/null
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: pipelines-engine-storage
