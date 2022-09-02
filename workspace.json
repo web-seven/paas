@@ -5,6 +5,7 @@
     "composition-engine": "./packages/composition",
     "delivery-engine": "./packages/delivery",
     "monitoring-engine": "./packages/monitoring",
-    "pipelines-engine": "./packages/pipelines"
+    "pipelines-engine": "./packages/pipelines",
+    "website": "./docs/_website"
   }
 }

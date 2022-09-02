@@ -1,0 +1,14 @@
+@import url('https://fonts.googleapis.com/css2?family=Ubuntu:wght@500&display=swap');
+
+:root {
+    --c-brand: #e50019;
+    --c-brand-light: #e50019;
+
+    // font vars
+    --font-family: Ubuntu;
+}
+
+html.dark {
+    --c-brand: #e50019;
+    --c-brand-light: #e50019;
+}  
