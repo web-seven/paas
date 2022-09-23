@@ -2,7 +2,9 @@
   "name": "paas",
   "version": "0.0.0",
   "license": "MIT",
-  "scripts": {},
+  "scripts": {
+    "website:build": "vuepress build docs/website"
+  },
   "private": true,
   "dependencies": {},
   "devDependencies": {
