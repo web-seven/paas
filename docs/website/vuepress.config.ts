@@ -6,7 +6,7 @@ export default defineUserConfig({
     lang: 'en-US',
     title: 'PaaS.dev',
     description: 'Kubernetes Native Development Platfrom',
-    dest: '../',
+    dest: 'docs/dist/website',
     theme: defaultTheme({
         logo: '/images/paas_logo.svg',
         contributors: false,
