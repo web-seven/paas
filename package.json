@@ -3,7 +3,8 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
-    "website:build": "vuepress build docs/website"
+    "website:build": "vuepress build docs/website --config ./docs/website/vuepress.config.ts",
+    "website:dev": "vuepress dev docs/website --config ./docs/website/vuepress.config.ts"
   },
   "private": true,
   "dependencies": {},
