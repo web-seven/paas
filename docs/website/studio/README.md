@@ -1,6 +1,9 @@
 # Studio
+Complete Enterprise Solution for Development Teams. 
 
-Complete Enterprise Solution for development teams. 
+## Features
+* Visual Manager for Development Platform
+* Managed Development Infrastructure
 
 ## Pricing
 

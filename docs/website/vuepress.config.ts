@@ -13,25 +13,60 @@ export default defineUserConfig({
         lastUpdated: false,
         navbar: [
             {
-                text: 'Home',
-                link: '/',
-            },
-            {
-                text: 'Platform',
-                link: '/platform',
+                text: 'Guide',
+                children: [
+                    { text: 'Overview', link: '/guide/overview'},
+                    { text: 'Features', link: '/guide/features'},
+                    { text: 'Installation', link: '/guide/installation'},
+                ],
             },
             {
                 text: 'Modules',
-                link: '/modules',
                 children: [
-                    { text: 'Development', link: '/developers'},
-                    { text: 'Composition', link: '/developers'},
-                    { text: 'Pipelines', link: '/developers'},
-                    { text: 'Deployments', link: '/developers'},
-                    { text: 'Monitoring', link: '/developers'},
-                    { text: 'Tracing', link: '/developers'},
-                    { text: 'Automations', link: '/developers'},
-                    { text: 'Hybrid IDE', link: '/developers'},
+                    { 
+                        text: 'Development', link: '/modules/development',
+                        children: [
+                            { text: 'Hybrid IDE', link: '/modules/development/ide'},
+                            { text: 'Source Repository', link: '/modules/development/source-repository'},
+                        ],
+                    },
+                    { 
+                        text: 'Building',
+                        children: [
+                            { text: 'Containers', link: '/modules/composition/containers'},
+                            { text: 'Helm Charts', link: '/modules/composition/helm-charts'},
+                        ],
+                    },
+                    { 
+                        text: 'Pipelines',
+                        children: [
+                            { text: 'GitHub', link: '/modules/pipelines/github'},
+                            { text: 'Bitbucket', link: '/modules/pipelines/bitbucket'},
+                            { text: 'Webhook', link: '/modules/pipelines/webhook'},
+                        ]
+                    },
+                    { 
+                        text: 'Testing',
+                        children: [
+                            { text: 'Unit', link: '/modules/testing/unit'},
+                            { text: 'Integration', link: '/modules/testing/integration'},
+                            { text: 'E2E', link: '/modules/testing/e2e'},
+                        ]
+                    },
+                    { 
+                        text: 'Deployment',
+                        children: [
+                            { text: 'Kubernetes Cluster', link: '/modules/delivery/k8s-cluster'},
+                        ]
+                    },
+                    { 
+                        text: 'Monitoring',
+                        children: [
+                            { text: 'Performance', link: '/modules/monitoring/performance'},
+                            { text: 'WebPageTest', link: '/modules/monitoring/webpagetest'},
+                            { text: 'Tracing', link: '/modules/monitoring/tracing'},
+                        ]
+                    },
                 ],
             },
             {
